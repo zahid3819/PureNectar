@@ -1,0 +1,222 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PureNectar Chatbot</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f5f5f5;
+        }
+        #chat-container {
+            width: 400px;
+            max-height: 600px;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+        }
+        #chat-header {
+            background: #f4c430;
+            color: white;
+            padding: 15px;
+            text-align: center;
+            border-top-left-radius: 10px;
+            border-top-right-radius: 10px;
+            font-weight: bold;
+        }
+        #chat-body {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background: #fffbee;
+        }
+        #chat-input {
+            display: flex;
+            padding: 10px;
+            border-top: 1px solid #ddd;
+            background: #f9f9f9;
+            border-bottom-left-radius: 10px;
+            border-bottom-right-radius: 10px;
+        }
+        #user-input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            outline: none;
+        }
+        #send-btn {
+            padding: 10px 15px;
+            margin-left: 10px;
+            background: #f4c430;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #send-btn:hover {
+            background: #e0b028;
+        }
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            max-width: 80%;
+        }
+        .user-message {
+            background: #f4c430;
+            color: white;
+            margin-left: auto;
+            text-align: right;
+        }
+        .bot-message {
+            background: #e0e0e0;
+            color: black;
+            margin-right: auto;
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <div id="chat-header">PureNectar Chatbot</div>
+        <div id="chat-body" id="chat-body"></div>
+        <div id="chat-input">
+            <input type="text" id="user-input" placeholder="Type your message...">
+            <button id="send-btn">Send</button>
+        </div>
+    </div>
+
+    <script>
+        // Configuration object for the chatbot
+        const chatbotConfig = {
+            businessName: "Organic Honey Co.",
+            products: [
+                { name: "Wildflower Honey", price: 10, description: "Pure, raw honey from wildflowers." },
+                { name: "Clover Honey", price: 12, description: "Smooth and mild honey from clover fields." },
+                { name: "Manuka Honey", price: 25, description: "Premium honey with health benefits." }
+            ],
+            faqs: [
+                { question: "organic", answer: "Yes, our honey is 100% organic, sourced from pesticide-free environments." },
+                { question: "shipping", answer: "We offer free shipping on orders over $50. Standard delivery takes 3-5 business days." },
+                { question: "return", answer: "We accept returns within 30 days if the product is unopened and in original condition." }
+            ],
+            greetings: [
+                "Hello! Welcome to Organic Honey Co. How can I help you today?",
+                "Hi there! Ready to explore our delicious organic honey? Ask me anything!"
+            ],
+            defaultResponse: "I'm not sure about that. Could you ask about our products, shipping, or organic certification?"
+        };
+
+        // DOM elements
+        const chatBody = document.getElementById('chat-body');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+
+        // Display greeting on load
+        window.onload = () => {
+            const greeting = chatbotConfig.greetings[Math.floor(Math.random() * chatbotConfig.greetings.length)];
+            addMessage(greeting, 'bot');
+        };
+
+        // Add message to chat body
+        function addMessage(text, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', `${sender}-message`);
+            messageDiv.textContent = text;
+            chatBody.appendChild(messageDiv);
+            chatBody.scrollTop = chatBody.scrollHeight;
+        }
+
+        // Process user input
+        function processInput(input) {
+            const cleanedInput = input.toLowerCase().trim();
+
+            // Check for product inquiries
+            const product = chatbotConfig.products.find(p => cleanedInput.includes(p.name.toLowerCase()));
+            if (product) {
+                return `${product.name}: ${product.description} Price: $${product.price}. Would you like to know more?`;
+            }
+
+            // Check for FAQs
+            const faq = chatbotConfig.faqs.find(f => cleanedInput.includes(f.question));
+            if (faq) {
+                return faq.answer;
+            }
+
+            // Check for general inquiries
+            if (cleanedInput.includes('products') || cleanedInput.includes('honey')) {
+                const productList = chatbotConfig.products.map(p => `${p.name} ($${p.price})`).join(', ');
+                return `We offer: ${productList}. Ask about a specific product for more details!`;
+            }
+
+            // Default response
+            return chatbotConfig.defaultResponse;
+        }
+
+        // Handle send button click
+        sendBtn.addEventListener('click', () => {
+            const input = userInput.value;
+            if (input.trim()) {
+                addMessage(input, 'user');
+                const response = processInput(input);
+                setTimeout(() => addMessage(response, 'bot'), 500); // Simulate typing delay
+                userInput.value = '';
+            }
+        });
+
+        // Handle enter key press
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && userInput.value.trim()) {
+                sendBtn.click();
+            }
+        });
+    </script>
+</body>
+</html>
